@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Wisko's test suite: a self-contained console runner (no test framework packages). See README.md. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Wisko.Tests</RootNamespace>
+    <AssemblyName>Wisko.Tests</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Engine\Wisko.Engine.csproj" />
+    <!-- The GUI smoke test runs the real editor module (Wisko.Editor's WiskoEditorModule). -->
+    <ProjectReference Include="..\..\Game\Wisko.Editor.csproj" />
+    <!-- The branding checks run the icon pipeline (tools/Wisko.BrandingAssets) on synthetic shapes. -->
+    <ProjectReference Include="..\..\tools\Wisko.BrandingAssets\Wisko.BrandingAssets.csproj" />
+  </ItemGroup>
+
+</Project>

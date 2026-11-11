@@ -1,0 +1,12 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+.DS_Store
+dist/
+
+# Local tool settings and environment files: never commit credentials or personal settings
+.claude/settings.local.json
+.env
+.env.*

@@ -1,0 +1,44 @@
+{
+  "Source": {
+    "File": "Wisko-GoldenW-original.png",
+    "Sha256": "359420843fddb30e0d2bb67ad2b244a501cd14b8b2513383d973d5446f507dea",
+    "Width": 568,
+    "Height": 617
+  },
+  "Crop": null,
+  "Background": "#000000",
+  "Tolerance": 24,
+  "Padding": 0.04,
+  "RemoveEnclosed": false,
+  "Logo": [
+    59,
+    111,
+    453,
+    377
+  ],
+  "Upscaled": true,
+  "Outputs": {
+    "AppIcon/Wisko-AppIcon-1024.png": "9c96763f4fe5c68ffe66272e613b90c8c9e2e297f5e7399bf6c4eb8762abfbed",
+    "AppIcon/Wisko-AppIcon.icns": "cd51aa04bc714c94c044f87df1362b48234511ac3a3b9b71c58b0c340992baef",
+    "AppIcon/Wisko-AppIcon.ico": "619ddc84bb3332702d4196b8668317db4634c398fa6e05b4e912b83b4cb0f151",
+    "Installer/Wisko-WizardImage-202x386.png": "b7a052fbfdcbb871f52796b1f1d6b431fa7a393183fdf7f3c3490ac6a0defc04",
+    "Installer/Wisko-WizardImage-269x515.png": "6a5b451d991210cee4151c125da88a302c52fd32f68373fd08ae7bab2ff20499",
+    "Installer/Wisko-WizardImage-336x643.png": "108fddaf202afc0d619e79c9e993bc88b6f7d44b3db682e543e8d2e526706302",
+    "Installer/Wisko-WizardImage-403x772.png": "f12e1e7fcc8f3839379344851c30bc391356f206bdb2b7032d8ff438f75a2097",
+    "Installer/Wisko-WizardImage-430x824.png": "52b78ffe6c17b8a7c356a586c449d15d698c441927118e223b0bbc8eafad8158",
+    "Installer/Wisko-WizardImage-498x953.png": "06cde90a107746dcd9669e9708e05838d0928414ddf5497024b666e871d64468",
+    "Installer/Wisko-WizardImage-534x1022.png": "76850fdd7c49783a38b640cb10aa752765814d63ba1b75f6ce0455b80a7acf85",
+    "Installer/Wisko-WizardSmallImage-116.png": "42a25bece8153d6834a2db1a1356ea282971202685ad4537ff90afe41c8ebaa2",
+    "Installer/Wisko-WizardSmallImage-124.png": "e89c3c7a77f7ae3e9b872cd982c68778ebbb20360b1c37a64e66c03c49c505cd",
+    "Installer/Wisko-WizardSmallImage-143.png": "6362b7efdbb0a1d28412275876f28d2825a0753993e01ed61b60fa8debc97db4",
+    "Installer/Wisko-WizardSmallImage-159.png": "e51baed0d103727bef792034c4279cf7134cac180c223cb6fffd7b68bb1236fd",
+    "Installer/Wisko-WizardSmallImage-58.png": "995ef9ba742e4fbe6258331842abdfd8d4590c84c8a7ac94f44894a90a50a1bd",
+    "Installer/Wisko-WizardSmallImage-77.png": "5b2a2ae8a8ef5be02a2baf10613d880cb80d9cffefba328461dbe086236a281c",
+    "Installer/Wisko-WizardSmallImage-97.png": "f8ce2ad010a6795f3cdedcb0035c9b60c4ec73048128f6d1a2cf7601931967f1",
+    "Master/Wisko-Master-Transparent.png": "23ddf845e8a3cdf430a8bf23f5b27167831bcb2cd1991f76446fbcd88ad1c589",
+    "Tiny/Wisko-TinyMark-16.png": "588417b9285b0526704642cfe0e195528fd6e0761acf1981c470dee0d8b18388",
+    "Tiny/Wisko-TinyMark-32.png": "ade53b1a9adac9b383bbd1d2968b6ef301c079775b72b873a0bdd58e0daaf10d",
+    "Tiny/Wisko-TinyMark-512.png": "18218a36497cd8d2da41046a45b1d53365dc428002482fa07ed889f4bc5bc4aa",
+    "Tiny/Wisko-TinyMark-64.png": "264100c13064dc964f2262f82d7f0fcfbb390de5e05fe4e6d660c9de679b895f"
+  }
+}

@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Wisko.Editor</RootNamespace>
+    <AssemblyName>Wisko.Editor</AssemblyName>
+    <!-- Single source of the app version (assembly metadata + macOS Info.plist via scripts/build-macos-app.sh). -->
+    <Version>0.1.0</Version>
+    <ApplicationIcon>..\branding\AppIcon\Wisko-AppIcon.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <!-- Windows desktop app (scripts/build-windows-app.ps1 sets WiskoWindowsApp=true): the executable is Wisko.exe and
+       uses the Windows GUI subsystem, so starting it from Explorer or a shortcut opens no console window. Output still
+       reaches the log file (AppLog). Terminal, IDE and macOS builds are unchanged. -->
+  <PropertyGroup Condition="'$(WiskoWindowsApp)' == 'true'">
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>Wisko</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Engine\Wisko.Engine.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="StbImageSharp" Version="2.30.15" />
+  </ItemGroup>
+
+  <!-- Assimp on macOS: the app ships Assimp 6.0.2 only (libassimp.6.dylib, which AssimpModelImporter loads there).
+       Ultz.Native.Assimp 6.0.2 also carries libassimp.5.dylib, a leftover Assimp 5.4.1 build that Wisko never loads and
+       no other library links; it is left out of the output and of Wisko.Editor.deps.json. Windows is unaffected. -->
+  <Target Name="WiskoLeaveOutLegacyAssimp" AfterTargets="ResolvePackageAssets">
+    <ItemGroup>
+      <NativeCopyLocalItems Remove="@(NativeCopyLocalItems)" Condition="'%(Filename)%(Extension)' == 'libassimp.5.dylib'" />
+      <RuntimeTargetsCopyLocalItems Remove="@(RuntimeTargetsCopyLocalItems)" Condition="'%(Filename)%(Extension)' == 'libassimp.5.dylib'" />
+    </ItemGroup>
+  </Target>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\branding\Tiny\Wisko-TinyMark-16.png">
+      <LogicalName>Wisko.Branding.Icon16</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\branding\Tiny\Wisko-TinyMark-32.png">
+      <LogicalName>Wisko.Branding.Icon32</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\branding\Tiny\Wisko-TinyMark-64.png">
+      <LogicalName>Wisko.Branding.Icon64</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\branding\AppIcon\Wisko-AppIcon-1024.png">
+      <LogicalName>Wisko.Branding.Icon1024</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>

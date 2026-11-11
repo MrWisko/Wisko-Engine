@@ -1,0 +1,3 @@
+# Generated bgfx binding (kept byte-identical to the pinned upstream file): its type is named "bgfx".
+[*.cs]
+dotnet_diagnostic.CS8981.severity = none

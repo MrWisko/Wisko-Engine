@@ -1,0 +1,41 @@
+name: Bug report
+description: Something in Wisko Engine does not work as it should.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead. Steps to reproduce it help most.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Wisko version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Windows 11
+        - Windows 10
+        - macOS (Apple silicon)
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: System details
+      description: The Windows or macOS version, and the graphics card or Mac model.
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: >-
+        Paste the relevant part of Wisko.log (Windows: %LOCALAPPDATA%\Wisko\Logs\Wisko.log; macOS:
+        ~/Library/Logs/Wisko/Wisko.log). Check it for anything private first.
+      render: text

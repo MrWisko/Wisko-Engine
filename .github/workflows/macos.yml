@@ -1,0 +1,493 @@
+# Wisko on macOS (Apple Silicon): build, tests, native libraries, Metal, app bundle.
+#
+# Runs on every push to main, on pull requests (documentation-only changes skipped) and by hand (Actions > macOS > Run
+# workflow). See docs/macos.md for what this workflow can and cannot verify (a hosted runner is a virtual machine without
+# a real GPU or display).
+name: macOS
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**/*.md", "docs/**"]
+  pull_request:
+    paths-ignore: ["**/*.md", "docs/**"]
+  workflow_dispatch:
+    inputs:
+      gui_probe:
+        description: Also start the GUI test runner to record how far it gets on macOS (it drives the Windows editor today)
+        type: boolean
+        default: false
+
+# Read-only access to the repository and nothing else; no secrets are used. Pull requests from forks get the same
+# read-only token, so they can build and test but change nothing.
+permissions:
+  contents: read
+
+# One run at a time per branch or pull request; a newer push to a pull request replaces its running check.
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# bash with -e and -o pipefail: a failing command in a pipeline (dotnet build ... | tee) fails its step.
+defaults:
+  run:
+    shell: bash
+
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+
+# Actions are pinned to full commit SHAs (tag in the comment); update them deliberately.
+
+jobs:
+  build-and-test:
+    name: Build and headless tests
+    runs-on: macos-15
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Machine
+        run: |
+          sw_vers
+          uname -m
+          sysctl -n machdep.cpu.brand_string hw.ncpu hw.memsize
+          dotnet --info | head -30
+
+      - name: Build (Debug and Release)
+        timeout-minutes: 15
+        run: |
+          mkdir -p logs
+          dotnet build Wisko.sln -c Debug 2>&1 | tee logs/build-debug.txt
+          dotnet build Wisko.sln -c Release 2>&1 | tee logs/build-release.txt
+          {
+            echo "### Build"
+            echo
+            echo "Debug: $(grep -E '^ +[0-9]+ Warning\(s\)' logs/build-debug.txt | tail -1 | xargs), $(grep -E '^ +[0-9]+ Error\(s\)' logs/build-debug.txt | tail -1 | xargs)"
+            echo "Release: $(grep -E '^ +[0-9]+ Warning\(s\)' logs/build-release.txt | tail -1 | xargs), $(grep -E '^ +[0-9]+ Error\(s\)' logs/build-release.txt | tail -1 | xargs)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Headless tests (Release)
+        id: headless
+        timeout-minutes: 18
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          dotnet Tests/Wisko.Tests/bin/Release/net10.0/Wisko.Tests.dll --work "$RUNNER_TEMP/wisko-tests" 2>&1 | tee logs/headless-release.txt
+
+      - name: Headless tests (Debug)
+        id: headless_debug
+        timeout-minutes: 18
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          dotnet Tests/Wisko.Tests/bin/Debug/net10.0/Wisko.Tests.dll --work "$RUNNER_TEMP/wisko-tests-debug" 2>&1 | tee logs/headless-debug.txt
+
+      - name: Save safety and project save journal (crash and recovery tests, macOS file system)
+        id: journal
+        timeout-minutes: 8
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          dotnet Tests/Wisko.Tests/bin/Release/net10.0/Wisko.Tests.dll --only "Save safety" --work "$RUNNER_TEMP/save-safety" 2>&1 | tee logs/save-safety.txt
+          dotnet Tests/Wisko.Tests/bin/Release/net10.0/Wisko.Tests.dll --only "Project save journal" --work "$RUNNER_TEMP/journal" 2>&1 | tee logs/save-journal.txt
+
+      # The same import report as on Windows (packaging/windows/NATIVE-LIBRARIES.md, check 4): the tracked example models
+      # imported with Wisko's flags by libassimp.6.dylib must match the Windows baseline line for line. The package's
+      # libassimp.5.dylib is reported next to it for comparison only.
+      - name: Assimp import report against the Windows baseline
+        id: import
+        timeout-minutes: 5
+        continue-on-error: true
+        run: |
+          models="$RUNNER_TEMP/import-models"
+          mkdir -p "$models"
+          git archive HEAD examples | tar -x -C "$models"
+          tool=tools/Wisko.AssimpImportReport/bin/Release/net10.0
+          native="$tool/runtimes/osx-arm64/native"
+          ls -la "$native" | tee logs/assimp-native.txt
+          dotnet "$tool/Wisko.AssimpImportReport.dll" "$models" --assimp "$native/libassimp.5.dylib" --out logs/import-assimp5.txt > /dev/null || true
+          dotnet "$tool/Wisko.AssimpImportReport.dll" "$models" --assimp "$native/libassimp.6.dylib" --out logs/import-assimp6.txt > /dev/null
+          tr -d '\r' < packaging/windows/assimp-import-baseline.txt > logs/import-baseline-windows.txt
+          {
+            echo "### Assimp import report (tracked example models, Wisko's flags)"
+            echo "- Windows baseline: $(head -1 logs/import-baseline-windows.txt); $(tail -1 logs/import-baseline-windows.txt)"
+            echo "- macOS libassimp.6.dylib: $(head -1 logs/import-assimp6.txt); $(tail -1 logs/import-assimp6.txt)"
+            echo "- macOS libassimp.5.dylib (comparison): $(head -1 logs/import-assimp5.txt 2>/dev/null || true); $(tail -1 logs/import-assimp5.txt 2>/dev/null || true)"
+          } >> "$GITHUB_STEP_SUMMARY"
+          diff logs/import-baseline-windows.txt logs/import-assimp6.txt
+
+      - name: Report
+        if: always()
+        run: |
+          {
+            echo "### Headless tests"
+            for f in headless-release headless-debug save-safety save-journal; do
+              [ -f "logs/$f.txt" ] || continue
+              echo "- **$f**: $(grep -E '^=== SUMMARY' "logs/$f.txt" | tail -1)"
+            done
+            echo
+            echo "Failed checks (first 40):"
+            echo '```'
+            cat logs/headless-*.txt logs/save-*.txt 2>/dev/null | grep -E '^\[FAIL\]' | sort -u | head -40 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: macos-test-logs
+          path: logs/
+          retention-days: 14
+
+      - name: Fail when a test failed
+        if: steps.headless.outcome != 'success' || steps.headless_debug.outcome != 'success' || steps.journal.outcome != 'success' || steps.import.outcome != 'success'
+        run: |
+          echo "A test run or the import report failed: see the summary and the macos-test-logs artifact." >&2
+          exit 1
+
+  native-libraries:
+    name: Native libraries
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Vendored libbgfx.dylib (checksum, architecture, dependencies, exports)
+        run: |
+          mkdir -p native
+          lib=ThirdParty/bgfx/runtimes/osx-arm64/native/libbgfx.dylib
+          expected="$(sed -n 's/^ *SHA-256: *\([0-9a-f]\{64\}\).*/\1/p' ThirdParty/bgfx/VERSION.txt)"
+          actual="$(shasum -a 256 "$lib" | awk '{print $1}')"
+          file "$lib"
+          lipo -archs "$lib"
+          otool -L "$lib" | tee native/bgfx-dependencies.txt
+          otool -l "$lib" | awk '/LC_BUILD_VERSION/ { b = 1 } b && $1 == "minos" { print "minimum macOS " $2; b = 0 }'
+          nm -gU "$lib" | awk '{print $3}' | sort > native/bgfx-exports-vendored.txt
+          echo "exports: $(wc -l < native/bgfx-exports-vendored.txt)"
+          {
+            echo "### Vendored libbgfx.dylib"
+            echo "- SHA-256 $actual (VERSION.txt: $expected) $([ "$actual" = "$expected" ] && echo match || echo MISMATCH)"
+            echo "- architectures: $(lipo -archs "$lib"); exports: $(wc -l < native/bgfx-exports-vendored.txt)"
+          } >> "$GITHUB_STEP_SUMMARY"
+          [ "$actual" = "$expected" ] || { echo "libbgfx.dylib does not match ThirdParty/bgfx/VERSION.txt" >&2; exit 1; }
+          lipo -archs "$lib" | grep -qw arm64
+          grep -qx '_bgfx_init' native/bgfx-exports-vendored.txt
+          # Dependencies must be system libraries or loader-relative, never a build machine's paths.
+          if otool -L "$lib" | tail -n +2 | grep -E '/Users/|/private/|/tmp/|/opt/homebrew/'; then
+            echo "libbgfx.dylib links a machine-specific path" >&2
+            exit 1
+          fi
+
+      - name: Native libraries from NuGet packages (Lua, Assimp, GLFW, file dialogs)
+        timeout-minutes: 8
+        run: |
+          dotnet restore Game/Wisko.Editor.csproj -r osx-arm64
+          packages="$(dotnet nuget locals global-packages --list | sed -n 's/^global-packages: *//p')"
+          {
+            echo "### Native libraries from packages"
+            echo "| Library | Architectures | Minimum macOS | Non-system dependencies |"
+            echo "|---|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+          find "$packages" -path '*osx-arm64/native/*.dylib' | sort | while read -r lib; do
+            archs="$(lipo -archs "$lib")"
+            minos="$(otool -l "$lib" | awk '/LC_BUILD_VERSION/ { b = 1 } b && $1 == "minos" { print $2; b = 0 }' | head -1)"
+            deps="$(otool -L "$lib" | tail -n +2 | awk '{print $1}' | grep -vE '^(/usr/lib/|/System/Library/|@rpath/|@loader_path/)' | tr '\n' ' ' || true)"
+            echo "| ${lib#$packages} | $archs | ${minos:-?} | ${deps:-none} |" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      # Verification only: the pinned sources must still build an equivalent library (minimum macOS, exports). The
+      # rebuilt file is never packaged; the app uses the committed one. Rebuilt as ThirdParty/bgfx/VERSION.txt describes:
+      # bx's GENie toolchain gives osx-arm64 no deployment target, so MACOSX_DEPLOYMENT_TARGET sets it without changing
+      # any source (clang and ld read it). Calls to APIs newer than the target show up as -Wunguarded-availability
+      # warnings (reported).
+      - name: Rebuild libbgfx.dylib from the pinned commits (verification only, deployment target macOS 14.0)
+        timeout-minutes: 25
+        env:
+          MACOSX_DEPLOYMENT_TARGET: "14.0"
+        run: |
+          set -euo pipefail
+          commit() { sed -n "s/^ *$1 *\([0-9a-f]\{40\}\).*/\1/p" ThirdParty/bgfx/VERSION.txt; }
+          work="$RUNNER_TEMP/bgfx-build"
+          mkdir -p "$work"
+          for repo in bgfx bx bimg; do
+            git init -q "$work/$repo"
+            git -C "$work/$repo" remote add origin "https://github.com/bkaradzic/$repo.git"
+            git -C "$work/$repo" fetch -q --depth 1 origin "$(commit "$repo")"
+            git -C "$work/$repo" checkout -q FETCH_HEAD
+            echo "$repo $(git -C "$work/$repo" rev-parse HEAD)" | tee -a native/bgfx-build-sources.txt
+          done
+          { xcodebuild -version; echo "SDK $(xcrun --show-sdk-version) ($(xcrun --show-sdk-path))"; clang --version | head -1; echo "MACOSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET"; } | tee native/bgfx-build-toolchain.txt
+          cd "$work/bgfx"
+          ../bx/tools/bin/darwin/genie --with-tools --with-shared-lib --gcc=osx-arm64 gmake
+          make -C .build/projects/gmake-osx-arm64 config=release -j"$(sysctl -n hw.ncpu)" bgfx-shared-lib 2>&1 | tee "$GITHUB_WORKSPACE/native/bgfx-build-log.txt"
+          built=.build/osx-arm64/bin/libbgfx-shared-libRelease.dylib
+          cp "$built" "$GITHUB_WORKSPACE/native/libbgfx-rebuilt.dylib"
+          nm -gU "$built" | awk '{print $3}' | sort > "$GITHUB_WORKSPACE/native/bgfx-exports-rebuilt.txt"
+          cd "$GITHUB_WORKSPACE"
+          lib=native/libbgfx-rebuilt.dylib
+          minos="$(otool -l "$lib" | awk '/LC_BUILD_VERSION/ { b = 1 } b && $1 == "minos" { print $2; b = 0 }' | head -1)"
+          sdk="$(otool -l "$lib" | awk '/LC_BUILD_VERSION/ { b = 1 } b && $1 == "sdk" { print $2; b = 0 }' | head -1)"
+          otool -L "$lib" | tee native/bgfx-rebuilt-dependencies.txt
+          grep -E 'unguarded-availability|is only available on macOS' native/bgfx-build-log.txt | sort -u > native/bgfx-availability-warnings.txt || true
+          {
+            echo "### Rebuilt libbgfx.dylib (verification only, not packaged)"
+            echo "- toolchain: $(tr '\n' ';' < native/bgfx-build-toolchain.txt)"
+            echo "- minimum macOS $minos, SDK $sdk, architectures $(lipo -archs "$lib")"
+            echo "- SHA-256 $(shasum -a 256 "$lib" | awk '{print $1}') (builds are not byte-reproducible; the exports are compared)"
+            echo "- exports: $(wc -l < native/bgfx-exports-rebuilt.txt) rebuilt, $(wc -l < native/bgfx-exports-vendored.txt) vendored"
+            echo "- availability warnings (APIs newer than the target): $(wc -l < native/bgfx-availability-warnings.txt)"
+            head -20 native/bgfx-availability-warnings.txt | sed 's/^/  - /'
+          } >> "$GITHUB_STEP_SUMMARY"
+          [ "$minos" = "14.0" ] || { echo "the rebuilt libbgfx.dylib targets macOS $minos, not 14.0" >&2; exit 1; }
+          lipo -archs "$lib" | grep -qw arm64
+          if otool -L "$lib" | tail -n +2 | grep -E '/Users/|/private/|/tmp/|/opt/homebrew/'; then
+            echo "the rebuilt libbgfx.dylib links a machine-specific path" >&2
+            exit 1
+          fi
+          diff native/bgfx-exports-vendored.txt native/bgfx-exports-rebuilt.txt
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: macos-native-libraries
+          path: native/
+          retention-days: 14
+
+  app-and-metal:
+    name: App bundle, Metal and bgfx
+    # Release packaging: the committed, checksum-verified libbgfx.dylib (ThirdParty/bgfx/VERSION.txt), never a rebuild.
+    # The rebuild in the native-libraries job only verifies that the pinned sources still produce an equivalent library.
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Metal availability
+        # Information: the app's own start below is the real check.
+        continue-on-error: true
+        run: |
+          mkdir -p logs
+          system_profiler SPDisplaysDataType | tee logs/displays.txt
+          cat > "$RUNNER_TEMP/metal.swift" <<'SWIFT'
+          import Metal
+          if let device = MTLCreateSystemDefaultDevice() {
+              print("Metal device: \(device.name); low power \(device.isLowPower); unified memory \(device.hasUnifiedMemory)")
+              print("Apple GPU family 7: \(device.supportsFamily(.apple7)); Mac family 2: \(device.supportsFamily(.mac2))")
+          } else {
+              print("No Metal device")
+          }
+          SWIFT
+          swift "$RUNNER_TEMP/metal.swift" | tee logs/metal.txt
+          echo "### Metal" >> "$GITHUB_STEP_SUMMARY"
+          sed 's/^/- /' logs/metal.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build Wisko Engine.app
+        timeout-minutes: 15
+        run: |
+          mkdir -p logs
+          ./scripts/build-macos-app.sh 2>&1 | tee logs/build-app.txt
+
+      - name: Check the bundle (signature, licenses, binaries)
+        run: |
+          app="dist/Wisko Engine.app"
+          codesign --verify --deep --strict "$app"
+          plutil -lint "$app/Contents/Info.plist"
+          for file in LICENSE.txt NOTICE.txt THIRD-PARTY-NOTICES.md BRANDING.md licenses/dotnet/LICENSE.TXT licenses/dotnet/THIRD-PARTY-NOTICES.TXT; do
+            [ -f "$app/Contents/Resources/$file" ] || { echo "missing Contents/Resources/$file" >&2; exit 1; }
+          done
+          du -sh "$app" | tee -a logs/build-app.txt
+
+      # The packaged native libraries are the approved files. Bundling changes two things in a library: libbgfx.dylib
+      # gets a loader-relative install name, and every file gets the bundle's ad-hoc signature
+      # (scripts/build-macos-app.sh). Applying those same two steps to the approved file must give the packaged file
+      # byte for byte.
+      - name: Packaged native libraries are the approved files (bgfx, Assimp)
+        id: provenance
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          app="dist/Wisko Engine.app/Contents/MacOS"
+          packages="$(dotnet nuget locals global-packages --list | sed -n 's/^global-packages: *//p' | head -1)"
+          assimp="${packages%/}/ultz.native.assimp/6.0.2/runtimes/osx-arm64/native/libassimp.6.dylib"
+          committed=ThirdParty/bgfx/runtimes/osx-arm64/native/libbgfx.dylib
+          expected="$(sed -n 's/^ *SHA-256: *\([0-9a-f]\{64\}\).*/\1/p' ThirdParty/bgfx/VERSION.txt)"
+          approved="$(shasum -a 256 "$committed" | awk '{print $1}')"
+          [ "$approved" = "$expected" ] || { echo "the committed libbgfx.dylib does not match ThirdParty/bgfx/VERSION.txt" >&2; exit 1; }
+          ref="$RUNNER_TEMP/approved"
+          mkdir -p "$ref"
+          cp "$committed" "$ref/libbgfx.dylib"
+          install_name_tool -id @rpath/libbgfx.dylib "$ref/libbgfx.dylib" 2>/dev/null
+          codesign --force --sign - --timestamp=none "$ref/libbgfx.dylib" 2>/dev/null
+          cp "$assimp" "$ref/libassimp.6.dylib"
+          codesign --force --sign - --timestamp=none "$ref/libassimp.6.dylib" 2>/dev/null
+          uuid() { otool -l "$1" | awk '/LC_UUID/ { u = 1 } u && $1 == "uuid" { print $2; exit }'; }
+          same() { cmp -s "$1" "$2" && echo yes || echo NO; }
+          {
+            echo "### Packaged native libraries"
+            echo "| Library | Approved file (SHA-256) | Packaged (SHA-256) | Same bytes after install name and signature | UUID |"
+            echo "|---|---|---|---|---|"
+            echo "| libbgfx.dylib | ThirdParty/bgfx ($approved) | $(shasum -a 256 "$app/libbgfx.dylib" | awk '{print $1}') | $(same "$ref/libbgfx.dylib" "$app/libbgfx.dylib") | $(uuid "$app/libbgfx.dylib") |"
+            echo "| libassimp.6.dylib | Ultz.Native.Assimp 6.0.2 ($(shasum -a 256 "$assimp" | awk '{print $1}')) | $(shasum -a 256 "$app/libassimp.6.dylib" | awk '{print $1}') | $(same "$ref/libassimp.6.dylib" "$app/libassimp.6.dylib") | $(uuid "$app/libassimp.6.dylib") |"
+          } | tee logs/native-provenance.md >> "$GITHUB_STEP_SUMMARY"
+          cmp "$ref/libbgfx.dylib" "$app/libbgfx.dylib"
+          cmp "$ref/libassimp.6.dylib" "$app/libassimp.6.dylib"
+          [ "$(uuid "$app/libbgfx.dylib")" = "$(uuid "$committed")" ]
+          # Assimp 5.4.1 is not shipped: neither the file nor an entry in the dependency manifest.
+          [ ! -e "$app/libassimp.5.dylib" ] || { echo "libassimp.5.dylib is in the bundle" >&2; exit 1; }
+          ! grep -q 'libassimp\.5' "$app/Wisko.Editor.deps.json" || { echo "Wisko.Editor.deps.json lists libassimp.5" >&2; exit 1; }
+          echo "- libassimp.5.dylib: not in the bundle, not in Wisko.Editor.deps.json" | tee -a logs/native-provenance.md >> "$GITHUB_STEP_SUMMARY"
+
+      # The bundled Assimp imports the tracked example models exactly as Windows does (packaging/windows/assimp-import-baseline.txt).
+      - name: Bundled Assimp imports like the Windows baseline
+        id: bundle_import
+        continue-on-error: true
+        timeout-minutes: 6
+        run: |
+          set -euo pipefail
+          dotnet build tools/Wisko.AssimpImportReport -c Release -nologo -v q
+          models="$RUNNER_TEMP/import-models"
+          mkdir -p "$models"
+          git archive HEAD examples | tar -x -C "$models"
+          dotnet tools/Wisko.AssimpImportReport/bin/Release/net10.0/Wisko.AssimpImportReport.dll "$models" \
+            --assimp "dist/Wisko Engine.app/Contents/MacOS/libassimp.6.dylib" --out logs/import-bundle.txt > /dev/null
+          tr -d '\r' < packaging/windows/assimp-import-baseline.txt > logs/import-baseline-windows.txt
+          echo "- bundled libassimp.6.dylib: $(head -1 logs/import-bundle.txt); $(tail -1 logs/import-bundle.txt)" | tee -a logs/native-provenance.md >> "$GITHUB_STEP_SUMMARY"
+          diff logs/import-baseline-windows.txt logs/import-bundle.txt
+
+      - name: Deployment target of every binary in the bundle
+        run: |
+          app="dist/Wisko Engine.app"
+          {
+            echo "### Bundle binaries (Info.plist LSMinimumSystemVersion: $(plutil -extract LSMinimumSystemVersion raw "$app/Contents/Info.plist"))"
+            echo "| Binary | Architectures | Minimum macOS | SDK |"
+            echo "|---|---|---|---|"
+            for binary in "$app/Contents/MacOS"/*; do
+              file -b "$binary" | grep -q '^Mach-O' || continue
+              minos="$(otool -l "$binary" | awk '/LC_BUILD_VERSION/ { b = 1 } b && $1 == "minos" { print $2; b = 0 }' | sort -u | tr '\n' ' ')"
+              sdk="$(otool -l "$binary" | awk '/LC_BUILD_VERSION/ { b = 1 } b && $1 == "sdk" { print $2; b = 0 }' | sort -u | tr '\n' ' ')"
+              echo "| $(basename "$binary") | $(lipo -archs "$binary") | ${minos:-?} | ${sdk:-?} |"
+            done
+          } | tee logs/bundle-binaries.md >> "$GITHUB_STEP_SUMMARY"
+
+      # Launched the way a person launches it (LaunchServices, which also enforces LSMinimumSystemVersion); the app
+      # bundle defaults to bgfx/Metal and writes its log to ~/Library/Logs/Wisko/Wisko.log.
+      - name: Start the app with open (bgfx on Metal) and wait for its first frame
+        id: smoke
+        timeout-minutes: 4
+        continue-on-error: true
+        run: |
+          set +e
+          log="$HOME/Library/Logs/Wisko/Wisko.log"
+          rm -f "$log"
+          projects="$RUNNER_TEMP/smoke-projects"
+          mkdir -p "$projects"
+          open -n "dist/Wisko Engine.app" --args --projects "$projects" > logs/open.txt 2>&1
+          opened=$?
+          echo "open exit code: $opened" | tee -a logs/open.txt
+          for second in $(seq 1 60); do
+            grep -q '\[Startup\] First frame' "$log" 2>/dev/null && break
+            sleep 1
+          done
+          sleep 5
+          pid="$(pgrep -f 'Wisko Engine.app/Contents/MacOS/Wisko.Editor' | head -1)"
+          # The app's own window: its pixels, and how many distinct colours a 64 x 64 sample grid finds in it (a blank
+          # window has one or two). Needs screen recording permission, which hosted runners grant to screencapture.
+          cat > "$RUNNER_TEMP/window.swift" <<'SWIFT'
+          import AppKit
+          import CoreGraphics
+          let pid = Int32(CommandLine.arguments[1]) ?? -1
+          let output = CommandLine.arguments[2]
+          let windows = (CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? [])
+              .filter { ($0[kCGWindowOwnerPID as String] as? Int32) == pid && ($0[kCGWindowLayer as String] as? Int) == 0 }
+          guard let window = windows.first, let id = window[kCGWindowNumber as String] as? Int else { print("no window for process \(pid)"); exit(1) }
+          let capture = Process()
+          capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+          capture.arguments = ["-x", "-o", "-l\(id)", output]
+          try capture.run()
+          capture.waitUntilExit()
+          guard let image = NSImage(contentsOfFile: output), let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff) else { print("no window image"); exit(1) }
+          var colours = Set<Int>()
+          for y in stride(from: 0, to: bitmap.pixelsHigh, by: max(1, bitmap.pixelsHigh / 64)) {
+              for x in stride(from: 0, to: bitmap.pixelsWide, by: max(1, bitmap.pixelsWide / 64)) {
+                  if let c = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) {
+                      colours.insert(Int(c.redComponent * 255) << 16 | Int(c.greenComponent * 255) << 8 | Int(c.blueComponent * 255))
+                  }
+              }
+          }
+          print("window \(id): \(bitmap.pixelsWide) x \(bitmap.pixelsHigh) pixels, \(colours.count) distinct colours")
+          SWIFT
+          swift "$RUNNER_TEMP/window.swift" "${pid:-0}" logs/app-window.png 2>&1 | tail -3 | tee logs/app-window.txt
+          screencapture -x logs/app-screen.png 2>/dev/null
+          cp "$log" logs/app-run.txt 2>/dev/null
+          [ -n "$pid" ] && { kill "$pid"; sleep 2; kill -9 "$pid" 2>/dev/null; }
+          colours="$(sed -n 's/.* \([0-9]*\) distinct colours$/\1/p' logs/app-window.txt)"
+          {
+            echo "### App start through open (bgfx)"
+            echo "- open exit code $opened; process ${pid:-not found}; $(cat logs/app-window.txt)"
+            echo '```'
+            grep -E '\[Startup\]|\[Renderer\]|\[Fatal\]|rror' logs/app-run.txt 2>/dev/null | head -20
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          [ "$opened" = 0 ] && grep -q '\[Renderer\] bgfx backend:' logs/app-run.txt && grep -q '\[Startup\] First frame' logs/app-run.txt \
+            && [ "${colours:-0}" -ge 10 ]
+
+      - name: GUI test runner probe
+        if: inputs.gui_probe
+        timeout-minutes: 10
+        continue-on-error: true
+        run: |
+          dotnet build Tests/Wisko.Tests/Wisko.Tests.csproj -c Release
+          dotnet Tests/Wisko.Tests/bin/Release/net10.0/Wisko.Tests.dll --gui-smoke --work "$RUNNER_TEMP/gui" 2>&1 | tee logs/gui-probe.txt
+          echo "### GUI probe: $(grep -E '^=== SUMMARY' logs/gui-probe.txt | tail -1)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Package the app for download
+        if: always()
+        run: |
+          mkdir -p bundle
+          if [ -d "dist/Wisko Engine.app" ]; then
+            ditto -c -k --keepParent "dist/Wisko Engine.app" "bundle/Wisko-Engine-macos-arm64-unsigned.zip"
+          fi
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: macos-app-logs
+          path: logs/
+          if-no-files-found: warn
+          retention-days: 14
+
+      # The app itself (unsigned, for testing only): already a zip, so stored without compressing it again, and kept
+      # only a week (hosted artifact storage is limited, especially for private repositories).
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: macos-app-bundle
+          path: bundle/
+          if-no-files-found: warn
+          compression-level: 0
+          retention-days: 7
+
+      - name: Fail when packaging or the app start failed
+        if: steps.smoke.outcome != 'success' || steps.provenance.outcome != 'success' || steps.bundle_import.outcome != 'success'
+        run: |
+          echo "Packaged native libraries (${{ steps.provenance.outcome }}), bundled Assimp import (${{ steps.bundle_import.outcome }}) or app start (${{ steps.smoke.outcome }}) failed: see the summary and the macos-app-logs artifact." >&2
+          exit 1

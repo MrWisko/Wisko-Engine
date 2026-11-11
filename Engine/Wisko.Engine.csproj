@@ -1,0 +1,66 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Wisko.Engine</RootNamespace>
+    <AssemblyName>Wisko.Engine</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Physics runtime, used only inside Engine/Physics. Pinned EXACTLY: BEPU does not use semantic versioning, and
+         BepuPhysics only asks for a minimum BepuUtilities, so both are pinned. Pure managed (no native binaries). -->
+    <PackageReference Include="BepuPhysics" Version="[2.5.0-beta.29]" />
+    <PackageReference Include="BepuUtilities" Version="[2.5.0-beta.29]" />
+    <PackageReference Include="NativeFileDialogs.Net" Version="1.3.0.1" />
+    <PackageReference Include="NLua" Version="1.7.9" />
+    <!-- OpenTK: only the parts Wisko uses (OpenGL bindings; GLFW windowing with its native library; maths), not the
+         OpenAL audio, OpenCL compute and HID controller libraries that the OpenTK meta-package adds. -->
+    <PackageReference Include="OpenTK.Graphics" Version="4.9.4" />
+    <PackageReference Include="OpenTK.Windowing.Desktop" Version="4.9.4" />
+    <!-- Model import (decode only; see Engine/Assets/Importing). Native Assimp comes transitively from Ultz.Native.Assimp. -->
+    <PackageReference Include="Silk.NET.Assimp" Version="2.23.0" />
+    <PackageReference Include="StbImageSharp" Version="2.30.15" />
+    <PackageReference Include="StbTrueTypeSharp" Version="1.26.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Wisko.Tests" />
+  </ItemGroup>
+
+  <!-- bgfx runtime (pinned; see ThirdParty/bgfx/VERSION.txt). Only Apple Silicon macOS is a supported bgfx
+       target for now, so the dylib is copied to the output root only there; "bgfx" resolves to it at runtime. -->
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('OSX')) And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">
+    <None Include="..\ThirdParty\bgfx\runtimes\osx-arm64\native\libbgfx.dylib" Link="libbgfx.dylib" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Rendering\Backend\Bgfx\Shaders\compiled\metal\*.bin" LogicalName="Engine.Bgfx.Shaders.metal.%(Filename).bin" />
+    <EmbeddedResource Include="Rendering\Backend\Bgfx\Shaders\atmosphere.sh" LogicalName="Engine.Shaders.atmosphere.sh" />
+    <!-- The gameplay prelude and the optional built-in modules (require("Wisko.Name")). -->
+    <EmbeddedResource Include="Scripting\Lua\gameplay.lua" LogicalName="Engine.Lua.gameplay.lua" />
+    <EmbeddedResource Include="Scripting\Lua\Modules\*.lua" LogicalName="Engine.Lua.Modules.%(Filename).lua" />
+    <!-- The Universal renderer's GLSL 330 sources (OpenGL only; compiled at start-up by ShaderLibrary). -->
+    <EmbeddedResource Include="Rendering\Universal\Shaders\*.*" LogicalName="Engine.Universal.%(Filename)%(Extension)" />
+    <!-- The New World screen's template pictures (rendered by Wisko; see Projects/TemplatePreviews.cs). -->
+    <EmbeddedResource Include="Assets\TemplatePreviews\*.*" LogicalName="Engine.TemplatePreviews.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Assets\Fonts\Inter-Regular.ttf">
+      <LogicalName>Engine.Fonts.Inter-Regular.ttf</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Assets\Fonts\Inter-SemiBold.ttf">
+      <LogicalName>Engine.Fonts.Inter-SemiBold.ttf</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Assets\Fonts\Inter-LICENSE.txt">
+      <LogicalName>Engine.Fonts.Inter-LICENSE.txt</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Assets\Fonts\JetBrainsMono-Regular.ttf">
+      <LogicalName>Engine.Fonts.JetBrainsMono-Regular.ttf</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Assets\Fonts\JetBrainsMono-LICENSE.txt">
+      <LogicalName>Engine.Fonts.JetBrainsMono-LICENSE.txt</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>

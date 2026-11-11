@@ -1,0 +1,37 @@
+{
+  "Version": 1,
+  "Width": 320,
+  "Height": 180,
+  "Densities": [
+    1,
+    2,
+    3
+  ],
+  "Templates": {
+    "Classic": {
+      "Content": "7BA39EE0FBB7932B",
+      "Environment": "61DEB7BA2201C36B",
+      "CameraPosition": [
+        300,
+        26,
+        330
+      ],
+      "CameraYaw": -133.15239,
+      "CameraPitch": -8.301302,
+      "CameraFieldOfView": 34
+    },
+    "Testing": {
+      "Content": "672818B1B7C6F180",
+      "Environment": "61DEB7BA2201C36B",
+      "CameraPosition": [
+        -20,
+        10,
+        40
+      ],
+      "CameraYaw": -62.86486,
+      "CameraPitch": -9.100778,
+      "CameraFieldOfView": 30
+    }
+  },
+  "Command": "dotnet run --project Tests/Wisko.Tests -- --make-template-previews"
+}

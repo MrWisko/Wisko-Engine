@@ -1,0 +1,38 @@
+bgfx runtime for Wisko Engine
+=============================
+
+Pinned sources (https://github.com/bkaradzic/*), checked out side by side as bgfx/, bx/, bimg/:
+  bgfx  abf165d8a78f962ad05da05f10adf0380bce286d  (2026-10-03)
+  bx    74adb68722ba342ac557523aad68a4e1a1037b66  (2026-10-01)
+  bimg  8fc52fdd4be9099821ee7953c988e96adf52cd1d  (2026-10-03)
+
+bgfx API version: 163 (include/bgfx/defines.h BGFX_API_VERSION)
+C# binding: bgfx/bindings/cs/bgfx.cs from the same bgfx commit, kept byte-identical in
+  Engine/Rendering/Backend/Bgfx/Native/bgfx.cs (DllName "bgfx" via BgfxDllName.cs).
+
+runtimes/osx-arm64/native/libbgfx.dylib
+  Architecture: arm64 (Mach-O 64-bit dynamically linked shared library), Release
+  Minimum macOS: 14.0 (LC_BUILD_VERSION minos 14.0, SDK 15.5)
+  Original build output: bgfx/.build/osx-arm64/bin/libbgfx-shared-libRelease.dylib (renamed)
+  SHA-256: 448684ac8c2958c06b08ddb3cfb1b2bb139b7c6639c586b7ecfbbfe92d368641
+  Mach-O UUID: 9d2012cd-3824-3cdd-8146-07e016bf146c
+  Built by: .github/workflows/macos.yml, job "Native libraries", run 40179845097 (commit 9cdc9d1) of Wisko's earlier,
+    private development repository (the run is not visible from this repository), on a GitHub-hosted
+    macos-15 runner (macOS 15.7.9) with Xcode 16.4 (16F6), SDK 15.5, Apple clang 17.0.0 (clang-1700.0.13.5).
+    71 sources compiled without warnings (none about APIs newer than macOS 14.0); exports identical to the previous
+    build (3831). The same run packaged it in the app, which opened through LaunchServices and drew the Hub on Metal.
+  Toolchain: Xcode's clang, GENie + gmake; no cmake.
+  Build commands (run in bgfx/):
+    export MACOSX_DEPLOYMENT_TARGET=14.0
+    ../bx/tools/bin/darwin/genie --with-tools --with-shared-lib --gcc=osx-arm64 gmake
+    make -C .build/projects/gmake-osx-arm64 config=release -j<ncpu> bgfx-shared-lib
+  MACOSX_DEPLOYMENT_TARGET is required: bx's GENie toolchain gives osx-arm64 no deployment target, so without it clang
+  uses the build Mac's SDK version (the previous build, until 2026-10-25, said minimum macOS 26.0). Builds are not
+  byte-reproducible (toolchain and paths differ); a rebuild is checked by its exports, minimum macOS and dependencies,
+  and by the app's start (workflow).
+  Release packaging uses this exact file: scripts/build-macos-app.sh refuses any libbgfx.dylib whose SHA-256 differs
+  from the one above. A rebuild (the workflow's native-libraries job) only verifies the pinned sources; it is never
+  packaged. Replacing this file is a deliberate change: new file, new SHA-256, UUID and build record here.
+
+Only the runtime library is vendored here (no sources, build trees or tools).
+Licenses: LICENSE-bgfx.txt, LICENSE-bx.txt, LICENSE-bimg.txt (BSD-2-Clause).

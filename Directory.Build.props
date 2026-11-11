@@ -1,0 +1,20 @@
+<Project>
+
+  <!-- File version information shown by Windows (Properties > Details) and the installer. -->
+  <PropertyGroup>
+    <Product>Wisko Engine</Product>
+    <Company>Wisko Industry Development</Company>
+    <Copyright>Copyright 2026 Wisko Industry Development</Copyright>
+  </PropertyGroup>
+
+  <!-- Release builds are reproducible and contain no paths from the machine that built them: source paths in the DLLs
+       and PDBs are mapped to /_/, and no source-control links are embedded (they would name the repository and commit
+       the build came from). Debug builds keep real paths for the debugger. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <Deterministic>true</Deterministic>
+    <PathMap>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)'))=/_/</PathMap>
+    <EnableSourceLink>false</EnableSourceLink>
+    <EnableSourceControlManagerQueries>false</EnableSourceControlManagerQueries>
+  </PropertyGroup>
+
+</Project>
