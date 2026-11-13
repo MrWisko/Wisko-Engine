@@ -1,0 +1,2 @@
+# Keep the package byte-identical on every platform (no line-ending conversion), so PACKAGE-SHA256SUMS.txt matches.
+* -text
