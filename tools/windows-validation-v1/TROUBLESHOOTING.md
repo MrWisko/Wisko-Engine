@@ -9,7 +9,7 @@ A failing test or build shows `[FAIL]` and the run continues where that makes se
 |---|---|
 | "…cannot be loaded because running scripts is disabled…" or "…is not digitally signed…" | Start it as shown, with `powershell -NoProfile -ExecutionPolicy Bypass -File …` (this process only). If the file is marked as downloaded: `Unblock-File .\Invoke-WiskoWindowsValidation.ps1` |
 | "Run this in 64-bit PowerShell" | Open "Windows PowerShell" or "PowerShell 7", not the "(x86)" one |
-| A parse error, with a line number | The file was changed in transfer. Compare it with `PACKAGE-SHA256SUMS.txt` and copy the package again |
+| A parse error, with a line number | First compare the package's files with `PACKAGE-SHA256SUMS.txt` (00-START-HERE.md, step 2). If a hash differs, the file was changed in transfer: copy the package again. If every hash matches, the file is exactly as published and the error is a defect in the script itself: do not edit the script to make it run; report the exact message and line number, and wait for a corrected package with new checksums |
 
 ## Repository checks
 

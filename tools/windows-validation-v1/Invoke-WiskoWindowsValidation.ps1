@@ -342,7 +342,7 @@ try {
 
     $osBuild = [int]$os.BuildNumber
     if ($osBuild -ge 22000) { Add-Result 'Windows version' 'PASS' "$($os.Caption) (build $osBuild)" }
-    else { Add-Result 'Windows version' 'WARN' "build $osBuild: Wisko 0.1.0 supports Windows 11; Windows 10 is not verified" }
+    else { Add-Result 'Windows version' 'WARN' "build ${osBuild}: Wisko 0.1.0 supports Windows 11; Windows 10 is not verified" }
 
     if ($sessionName -like 'RDP*') { Add-Result 'Local session' 'WARN' 'Remote Desktop session: the frame-pacing check and the GUI smoke test need the local console' }
     else { Add-Result 'Local session' 'PASS' "session '$sessionName'" }
