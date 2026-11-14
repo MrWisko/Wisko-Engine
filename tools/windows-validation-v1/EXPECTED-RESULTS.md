@@ -19,7 +19,7 @@ The reference results come from macOS for the same commit (`f2488258…`): CI ru
 | Windows-specific sections (Release) | PASS, 0 failed. This is `--only Windows`: "Visual C++ runtime (Windows)", "Windows frame pacing (compositor wait)" (including the real `DwmFlush` probe: at most 500 fps and 50% of a core) and "macOS fix pass: editor shortcuts (Windows Ctrl unchanged…)" | the first two have no checks to run on macOS |
 | GUI smoke test (Release) | PASS, 0 failed (with `-RunGuiSmoke`). It first checks the display: on, composing at 20–500 Hz, unlocked, local session | none on macOS (the GUI test drives the Windows editor) |
 | Packaging script | PASS: the build script's own checks pass (required files, self-contained, x64, GUI subsystem, icon, no administrator manifest, no absolute paths) | |
-| Portable zip contents | PASS: app, licences (`LICENSE.txt`, `NOTICE.txt`, `THIRD-PARTY-NOTICES.md`, `BRANDING.md`, `licenses/dotnet/`), the five examples, forward-slash entries; about 100 MB or more | |
+| Portable zip contents | PASS: app, licences (`LICENSE.txt`, `NOTICE.txt`, `THIRD-PARTY-NOTICES.md`, `BRANDING.md`, `licenses/dotnet/`), the five examples, forward-slash entries. The size shown is the zip file itself (compressed): about 55 MB. Unpacked, its contents are about 112 MB (the app about 96 MB, the examples about 16 MB) | |
 | Wisko.exe version info | PASS: "Wisko Engine" 0.1.0; signature NotSigned (expected) | |
 | Installer built | PASS: `Wisko-0.1.0-win-x64-setup.exe`, "Wisko Engine" 0.1.0, NotSigned (expected); **not run** | |
 | Installer test build: silent install / uninstall | PASS (with `-InstallerSmokeTest`): installed into the output folder, Apps entry present, 5 examples copied; then removed, with the examples kept | |

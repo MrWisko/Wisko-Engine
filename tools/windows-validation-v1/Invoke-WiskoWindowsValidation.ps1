@@ -550,7 +550,9 @@ try {
         $vi = (Get-Item $setup).VersionInfo
         $sig = (Get-AuthenticodeSignature $setup).Status
         $checkLines.Add("Installer: $setup; ProductName '$($vi.ProductName)', ProductVersion '$($vi.ProductVersion)', FileDescription '$($vi.FileDescription)', signature $sig")
-        if ($vi.ProductName -eq 'Wisko Engine' -and ('' + $vi.ProductVersion).StartsWith($ExpectedVersion)) {
+        # Inno Setup pads its version-info strings with trailing spaces (to 60 or 50 characters): compare them without
+        # that padding, but otherwise exactly.
+        if (('' + $vi.ProductName).TrimEnd() -ceq 'Wisko Engine' -and ('' + $vi.ProductVersion).TrimEnd() -ceq $ExpectedVersion) {
             Add-Result 'Installer built' 'PASS' ('{0} ({1:N0} MB); signature: {2} (unsigned is expected for 0.1.0); not run' -f (Split-Path -Leaf $setup), ((Get-Item $setup).Length / 1MB), $sig)
         }
         else { Add-Result 'Installer built' 'FAIL' "ProductName '$($vi.ProductName)', ProductVersion '$($vi.ProductVersion)'" }
